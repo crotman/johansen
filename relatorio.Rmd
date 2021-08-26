@@ -5,6 +5,10 @@ date: "25/08/2021"
 output: 
   html_document:
     code_folding: hide
+    number_sections: true
+    toc: true
+    toc_float: true    
+    
 ---
 
 ```{r setup, include=FALSE}
@@ -20,9 +24,12 @@ library(tidyverse)
 
 ```
 
-# Johansen
 
-## Leitura e log
+# Introdução
+
+
+
+# Leitura e tratamento
 
 Lendo os dados
 
@@ -30,16 +37,21 @@ Lendo os dados
 ```{r}
 
 dados <- readxl::read_excel("dados/dados.xlsx", "Plan1") %>% 
-  clean_names()
+  clean_names() %>% 
+  rename(
+    preco_do_real = taxa_de_cambio,
+    juros = juros_real,
+    gasto_gov = gasto_do_governo,
+    credito_disp = credito_disponivel
+  )
   
 gt(dados)
 
 
 ```
 
-
-
 Passando o log nas variáveis em dinheiro e no câmbio, para que possamos avaliar as elasticidades
+
 
 
 ```{r}
@@ -48,7 +60,7 @@ Passando o log nas variáveis em dinheiro e no câmbio, para que possamos avalia
 dados_log <- dados %>% 
   mutate(
     across(
-      .cols = c(inv, pib, taxa_de_cambio, gasto_do_governo, credito_disponivel),
+      .cols = c(inv, pib, preco_do_real, gasto_gov, credito_disp),
       .fns = log
     )
   )
@@ -58,10 +70,10 @@ gt(dados_log)
 
 ```
 
-## Teste de estacionariedade de cada série
+# Teste de estacionariedade de cada série
 
 
-### Investimento
+## Investimento
 
 Não podemos rejeitar a hipótese de o Investimento é não-estacionário
 
@@ -75,7 +87,7 @@ adf.test(dados_log$inv)
 
 
 
-### PIB
+## PIB
 
 Não podemos rejeitar a hipótese de o PIB é não-estacionário
 
@@ -88,30 +100,30 @@ adf.test(dados_log$pib)
 
 ```
 
-### Juros reais
+## Juros reais
 
 Não podemos rejeitar a hipótese de os juros reais são não-estacionários
 
 
 ```{r}
 
-adf.test(dados$juros_real)
+adf.test(dados$juros)
 
 ```
 
 
-### Taxa de câmbio
+## Taxa de câmbio
 
 Não podemos rejeitar a hipótese de que a taxa de cãmbio é não-estacionária
 
 
 ```{r}
 
-adf.test(dados_log$taxa_de_cambio)
+adf.test(dados_log$preco_do_real)
 
 ```
 
-###Spread
+##Spread
 
 Não podemos rejeitar a hipótese de que o spread é não-estacionário
 
@@ -129,25 +141,32 @@ Não podemos rejeitar a hipótese de que o gasto do governo é não-estacionári
 
 ```{r}
 
-adf.test(dados_log$gasto_do_governo)
+adf.test(dados_log$gasto_gov)
 
 ```
 
 
-###Crédito disponivel
+##Crédito disponivel
 
+Não podemos rejeitar a hipótese de que o crédito é não-estacionário
 
 
 ```{r}
 
-adf.test(dados_log$credito_disponivel)
+adf.test(dados_log$credito_disp)
 
 ```
 
 
+# Avaliação da primeira equação
+
+Estamos avaliando a equação
 
 
-##Existem quantas relações de longo prazo?
+$$Inv_t = Credito_t + addad_t $$
+
+
+## Existem quantas relações de longo prazo?
 
 
 vamos aplicar o teste de Johansen para saber quantas relações de longo prazo existem entre as séries
@@ -207,10 +226,68 @@ summary(resultado_johansen)
 ```
 
 
-##Estimando o modelo de correção de erros
+## Estimando o modelo de correção de erros
+
+$$ \begin{pmatrix}
+\Delta x_{1,t} \\
+\Delta x_{2,t} \\
+. \\
+\Delta x_{n,t} 
+\end{pmatrix} $$ 
+
+$$ = \begin{bmatrix}
+\phi_{11} & \phi_{12}  & . & \phi_{1n} \\
+\phi_{21} & \phi_{22}  & . &  \phi_{2n}\\
+. & . & . &  \\
+\phi_{n1} & \phi_{n2} & . & \phi_{nn} \\
+\end{bmatrix} \begin{pmatrix}
+\Delta x_{1,t-1} \\
+\Delta x_{2,t-1} \\
+. \\
+\Delta x_{n,t-1} 
+\end{pmatrix}$$ + 
+
+$$\begin{pmatrix}
+\alpha_{11} \\
+\alpha_{21} \\
+. \\
+\alpha_{n1} 
+\end{pmatrix} \beta_{01} + \beta_{11} x_{1,t_1} + \beta_{21} x_{2,t_1} + ... + \beta_{n1} x_{n,t_1} $$
+
+$$ + ... + $$
+
+$$ \begin{pmatrix}
+\alpha_{1p} \\
+\alpha_{2p} \\
+. \\
+\alpha_{np} 
+\end{pmatrix} \beta_{0p} + \beta_{1p} x_{1,t_1} + \beta_{2p} x_{2,t_1} + ... + \beta_{np} x_{n,t_1} $$
 
 
-```{r}
+
+Foram encontradas 2 relações de longo prazo
+
+
+Primeira equação que tem valor 0 (rel1):
+
+
+$$ Inv + 0.002 \cdot juros + 0.058 real + 0.006 spread - 5.721 gasto\_gov +  0.843 credito\_disp$$
+
+Segunda relação:
+
+
+
+
+Consideramndo apenas os coeficientes significativamente diferentes de 0: 
+
+$$ \Delta Investimento_t = -0.437 \cdot rel1 + ... - 68.891 - 0.0086 \cdot \Delta spread_{t-1} $$  
+
+
+
+
+
+
+```{r, warning=FALSE, message=FALSE}
 
 
 modeloVECM <- tsDyn::VECM(
@@ -231,17 +308,34 @@ summary(modeloVECM)
 
 
 
+```{r}
+
+# modelo_vars <- vars::vec2var(resultado_johansen, r = 2)
+# 
+# teste <- vars::irf(modelo_vars, impulse = "spread", response = "inv", n.ahead = 3, seed = 2, runs = 10)
+# 
+# 
+# plot(teste)
+
+
+```
+
+
+
+# Avaliação da segunda equação
 
 
 
 
+```{r}
+
+
+dados_log_sem_ano_sem_spread <- dados_log %>% 
+  select(-c(ano, spread))
 
 
 
-
-
-
-
+```
 
 
 
